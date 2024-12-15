@@ -40,3 +40,31 @@ myeloid_markers2 = {
 }
 
 
+
+markers = {
+    "pDC": [
+        "CCR7",
+        "PTPRC",
+        "CD209",
+        "CLEC4C",
+        "LILRB4",
+        "NRP1",
+        "IFNA1"
+    ],
+    "cDC1": [
+        "BTLA", "CADM1", "CD8A", "CLEC9A", 
+        "ITGAE", "ITGAX", "LY75", "THBD", "XCR1"
+    ],
+    "cDC2": [
+        "CD14", "CD163", "CLEC10A", "NOTCH2",
+        "ITGAM", "SIRPA", "CX3CR1", "CD1C", "CD2"
+    ],
+    "mo-DC": [
+        "CD14", "CD1A", "CD1C", "CD209",
+        "FCER1A", "ITGAM", "MRC1", "SIRPA"
+    ],
+    "macrophages": [
+        "CD14", "CD68",  "CSF1R",
+        "CD163", "ITGAM", "MARCO", "SPP1","TREM2"
+    ]
+}
