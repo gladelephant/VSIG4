@@ -1,0 +1,18 @@
+#library(Matrix)
+mtx=readMM("matrix.mtx")
+#library(Seurat)
+expression_matrix <- ReadMtx(
+  mtx = "GSM8398980_matrix.mtx.gz", features = "GSM8398980_features.tsv.gz",
+  cells = "GSM8398980_barcodes.tsv.gz"
+)
+seurat_object <- CreateSeuratObject(counts = expression_matrix)
+write_rds(seurat_object,"GSM8398980.rds")
+getwd()
+create_analysis_dirs <- function(project_path, version_tag) {
+  subdirs <- c("csv", "figures", "tables")
+  for (subdir in subdirs) {
+    dir.create(file.path(project_path, "03_results", version_tag, subdir), recursive = TRUE, showWarnings = FALSE)
+  }
+}
+
+create_analysis_dirs("Project_BTC", "v3_20250323")
