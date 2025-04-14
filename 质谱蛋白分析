@@ -1,0 +1,16 @@
+gene_to_pop = read.csv("./subcell_location_Plasma.tsv", sep = '\t', header = T)
+write.csv(gene_to_pop,"HPA_2400_membrane_proteins.csv")
+
+gene<-read.table("LSMS_123分子.txt") #X1/X2>10, Coverage>15%, Unique_peptides>3, X1>100,000
+gene2<-intersect(gene_to_pop$Gene,gene$V1)  #2400和123
+gene2
+gene3 = read.csv(x, header = T)
+gene3$Humangene<-gene3$Gene.name
+gene3 <- gene3 %>% mutate(Humangene = toupper(Gene.name))
+subset_df <- gene3[gene3$Humangene %in% gene2, ]
+write.csv(subset_df,"质谱_18个膜蛋白分子(HPA).csv")
+gene4<-read.table(x)
+gene5<-intersect(gene3$Humangene,gene4$V1) #256和207
+gene5
+subset_df2 <- gene3[gene3$Humangene %in% gene5, ]
+write.csv(subset_df2,"质谱_4个蛋白交集(BioGRID).csv")
