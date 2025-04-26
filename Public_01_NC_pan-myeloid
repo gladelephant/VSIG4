@@ -1,0 +1,85 @@
+packageVersion("Seurat")
+.libPaths()
+system.file(package = "Seurat")
+setwd("C:/Users/alex/Documents/SeuratV4_Project")  # 举例
+install.packages("renv")  # 第一次用的话安装一次
+renv::init()
+renv::install("Seurat@4.4.0")
+library(Seurat)
+packageVersion("Seurat")
+# 应该输出 [1] ‘4.4.0’
+getwd()
+tam<-readRDS("Macrophage_atlas_NC.rds")
+#####================================================================================
+combined <- merge(seuratObj3, y = tam)
+library(SeuratDisk)
+combined = DietSeurat(
+  combined,
+  counts = TRUE,
+  data = TRUE,
+  scale.data = FALSE,
+  features = NULL,
+  assays = NULL,
+  dimreducs = NULL,
+  graphs = NULL,
+  misc = FALSE
+)
+# step 1: factor to character, or else your factor will be number in adata
+i <- sapply(combined@meta.data, is.factor)
+combined@meta.data[i] <- lapply(combined@meta.data[i], as.character)
+# step 2: change to h5ad
+SaveH5Seurat(eec4,filename="combined.h5seurat", overwrite = TRUE)
+Convert("combined.h5seurat", dest = "h5ad", assay="RNA", overwrite = TRUE)
+#####================================================================================
+metadata<-tam@meta.data
+DefaultAssay(tam) <- "integrated"
+rownames(tam@meta.data)<-tam@meta.data$cellid
+identical(colnames(tam[['integrated']]@scale.data), rownames(tam@meta.data))
+tam <- RunPCA(tam, verbose = FALSE)
+tam <- FindNeighbors(tam, dims = 1:30)
+DimPlot(tam, reduction = "umap", label = TRUE, label.size = 4)
+Idents(tam)<-"cancer"
+Idents(tam)<-"cellgroup"
+Idents(tam)<-"cancer"
+table(tam@meta.data$cellgroup)
+tam$cellgroup <- droplevels(tam$cellgroup)
+tam$cellgroup <- as.factor(tam$cellgroup)
+tam$cellgroup[is.na(tam$cellgroup)] <- "Unknown"
+levels(tam$cellgroup)
+DotPlot(tam,features = "VSIG4",dot.scale=4,cols="RdBu",
+        col.min=-2,col.max=2,scale.min=0,scale.max = 60)+
+  scale_x_discrete("")+scale_y_discrete("")+RotatedAxis()+
+  theme(axis.text.x=element_text(face="italic",size = 6))+
+  theme(axis.text.y = element_text(size = 6))+
+  theme(legend.title = element_text(size=6))+
+  theme(legend.text=element_text(size=6))+
+  guides(colour = guide_colourbar(title = "Average Expression",barwidth = .5, barheight = 3))
+library(RColorBrewer)
+VlnPlot(object = tam, features = 'VSIG4')
+VlnPlot(object = tam, features = 'VSIG4', pt.size = 0, cols = c54)
+c54 <- c('dodgerblue2','green4','#E31A1C','#6A3D9A','#FF7F00',
+         '#FB9A99','#CAB2D6','khaki2','deeppink1','blue1',      
+         'steelblue4','green1','yellow4','yellow3','forestgreen',
+         'red2','orange','cornflowerblue', 'magenta','darkolivegreen4',
+         'indianred1','tan4','darkblue','mediumorchid1','firebrick4',
+         'yellowgreen','lightsalmon','tan3','tan1','darkgray',
+         'wheat4','#DDAD4B','chartreuse','seagreen1','moccasin',
+         'mediumvioletred','seagreen','cadetblue1','darkolivegreen1','tan2',
+         'tomato3','#7CE3D8','gainsboro','gold1','skyblue2',
+         'palegreen2','#FDBF6F','gray70','darkorange4','orchid1',
+         'darkturquoise','maroon','brown','black')
+FeaturePlot(tam,feature=c("VSIG4"),reduction="umap",pt.size = 1,repel = T,label = T,
+            label.size = 3,label.color = "blue4")+
+  scale_x_continuous("")+scale_y_continuous("")+
+  scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu"))[6:11])
+FeaturePlot(tam,feature=c("VSIG4"))
+
+expr <- tam@assays$RNA@data
+#VSIG4阳性细胞
+gene_expression <- expr %>% .["VSIG4",] %>% as.data.frame()#挑选特定基因的表达数据
+colnames(gene_expression) <- "VSIG4"#列命名
+zero_rows <- sum(gene_expression$VSIG4 == 0)
+gene_expression$cell <- rownames(gene_expression)
+#选择阳性细胞
+gene_expression_select <- gene_expression[which(gene_expression$VSIG4>0),]
+combined <- combined[,rownames(gene_expression_select)]#直接从seurat对象提取，将需要的细胞名称传递到seurat对象的列
