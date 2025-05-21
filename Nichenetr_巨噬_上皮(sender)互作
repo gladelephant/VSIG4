@@ -1,0 +1,133 @@
+#
+scobj2 = schard::h5ad2seurat("D:\\HCC_VSIG4\\ATP1A1_VSIG4\\HCC_macrophage_VSIG4_nichenet_raw.h5ad")
+scobj3 = schard::h5ad2seurat("D:\\HCC_VSIG4\\ATP1A1_VSIG4\\HCC_hepatocyte_ATP1A1_nichenet_raw.h5ad")
+
+scobj2@meta.data$celltype<-'Macrophages'
+scobj3@meta.data$celltype<-'Hepatocytes'
+seurat_merge <- merge(scobj2, y = scobj3)
+write_rds(seurat_merge,"HCC_Nature_macrophages&hepatocytes.rds")
+sce <- seurat_merge
+colnames(sce@meta.data)
+table(sce@meta.data$celltype)
+receiver = "Macrophages"
+Idents(sce)<-'celltype'
+#从seurat对象的ident中提取，6946基因
+expressed_genes_receiver <- get_expressed_genes(receiver, sce, pct = 0.1)
+#获取定义的receiver cell中表达基因中receprter基因
+all_receptors <- unique(lr_network$to)
+expressed_receptors <- intersect(all_receptors, expressed_genes_receiver)
+#####================================================================================
+#sender是hepato
+sender_celltypes <- c("Hepatocytes")
+list_expressed_genes_sender <- sender_celltypes %>% unique() %>% lapply(get_expressed_genes, scobj3, 0.1)
+expressed_genes_sender <- list_expressed_genes_sender %>% unlist() %>% unique()
+potential_ligands <- lr_network %>% filter(to %in% expressed_receptors) %>% pull(from) %>% unique()
+#sender cell表达的配体
+potential_ligands_focused <- intersect(potential_ligands, expressed_genes_sender) 
+#================================================================================
+seurat_obj_receiver <- scobj2
+Idents(seurat_obj_receiver)<-'vsig4_status'
+seurat_obj_receiver <- NormalizeData(seurat_obj_receiver, normalization.method = 'LogNormalize', scale.factor = 10000)
+DE_table_receiver <-  FindMarkers(object = seurat_obj_receiver,
+                                  ident.1 = "positive", 
+                                  ident.2 = "negative",
+                                  group.by = "vsig4_status", #分类变量所在的列
+                                  min.pct = 0.1) %>% rownames_to_column("gene")
+geneset_oi <- DE_table_receiver %>% filter(p_val_adj <= 0.05 & avg_log2FC >= 0.5) %>% pull(gene)
+geneset_oi <- geneset_oi %>% .[. %in% rownames(ligand_target_matrix)]
+geneset_oi
+#-----------------------------------------------------------------------------------------
+#Define the background genes
+#受体细胞群（ligand_target_matrix）中所有表达的基因(expressed_genes_receiver)都被定义为下一步配体优先排序程序的“背景集”。
+#背景基因集大小也要看看，一般5000-10000，比感兴趣基因集要大得多
+background_expressed_genes <- expressed_genes_receiver %>% .[. %in% rownames(ligand_target_matrix)]
+#-----------------------------------------------------------------------------------------
+#Perform NicheNet ligand activity analysis
+#这一步是NicheNet分析的主要步骤，根据感兴趣基因集中target基因对ligand进行排序
+#the results of the sender-agnostic approach
+ligand_activities <- predict_ligand_activities(geneset = geneset_oi,
+                                               background_expressed_genes = background_expressed_genes,
+                                               ligand_target_matrix = ligand_target_matrix,
+                                               potential_ligands = potential_ligands)
+ligand_activities_all <- ligand_activities
+ligand_activities <- ligand_activities %>% filter(test_ligand %in% potential_ligands_focused)
+  
+ligand_activities <- ligand_activities %>%
+  arrange(-aupr_corrected) %>%
+  mutate(rank = rank(-aupr_corrected))
+
+#选择后续分析的ligand数量需要按照实际情况，可以做下面的直方图，截断点是top30
+p1 <-ggplot(ligand_activities, aes(x=aupr_corrected)) +
+  geom_histogram(color="black", fill="darkorange")  +
+  geom_vline(aes(xintercept=min(ligand_activities %>% top_n(100, aupr_corrected) %>% pull(aupr_corrected))),
+             color="red", linetype="dashed", size=1) +
+  labs(x="ligand activity (PCC)", y = "# ligands") +
+  theme_classic()
+p1
+#所有配体
+best_upstream_ligands <- ligand_activities %>% top_n(500, aupr_corrected) %>% arrange(-aupr_corrected) %>% pull(test_ligand)
+#best_upstream_ligands1 <- ligand_activities %>% top_n(30, aupr_corrected) %>% arrange(-aupr_corrected) %>% pull(test_ligand)
+
+vis_ligand_aupr <- ligand_activities %>% filter(test_ligand %in% best_upstream_ligands1) %>%
+  column_to_rownames("test_ligand") %>% select(aupr_corrected) %>% arrange(aupr_corrected) %>% as.matrix(ncol = 1)
+p2 <-make_heatmap_ggplot(vis_ligand_aupr,
+                         "Prioritized ligands", "Ligand activity", 
+                         legend_title = "AUPR", color = "darkorange") + 
+  theme(axis.text.x.top = element_blank(),
+        axis.text.y = element_text(size = 6)) 
+p2
+#================================================================================
+#5- Infer target genes and receptors of top-ranked ligands
+#识别排名靠前的配体所最可能调控的下游靶基因,每个配体的top500
+#推断基于先验的ligand-target-martrix
+active_ligand_target_links_df <- best_upstream_ligands %>%
+  lapply(get_weighted_ligand_target_links,
+         geneset = geneset_oi,
+         ligand_target_matrix = ligand_target_matrix,
+         n=500) %>%
+  bind_rows() %>% drop_na()
+##================================================================================
+#绘图,0.25代表分位数#####################################
+active_ligand_target_links <- prepare_ligand_target_visualization(
+  ligand_target_df = active_ligand_target_links_df,
+  ligand_target_matrix = ligand_target_matrix,
+  cutoff = 0.25) 
+order_ligands <- intersect(best_upstream_ligands, colnames(active_ligand_target_links)) %>% rev()
+order_targets <- active_ligand_target_links_df$target %>% unique() %>% intersect(rownames(active_ligand_target_links))
+vis_ligand_target <- t(active_ligand_target_links[order_targets, order_ligands])
+#展示针对VSIG4的ligand
+vis_ligand_target_tmp <- vis_ligand_target[vis_ligand_target[, "VSIG4"] != 0, ]
+
+p3 <- make_heatmap_ggplot(vis_ligand_target_tmp,
+                          "Prioritized ligands",    # 原本的 X 放到 Y
+                          "Predicted target genes",  # 原本的 Y 放到 X
+                          color = "purple",
+                          legend_title = "Regulatory potential") +
+  scale_fill_gradient2(low = "whitesmoke", high = "purple")
+
+p3
+#####================================================================================
+#感兴趣的ligand, VSIG4作为靶基因的相关ligand
+genes <- c("TNFSF11", "IL4", "L13", "L10", "CSF1", "CSF3", 
+           "CCL2", "L15", "LAMA2", "TGM2", "ANGPTL2", "L25", "OSM")
+expressed_receptors2 <- intersect(expressed_receptors,geneset_oi)
+expressed_receptors2
+
+ligand_receptor_links_df <- get_weighted_ligand_receptor_links(
+  genes, expressed_receptors,
+  lr_network, weighted_networks$lr_sig)
+vis_ligand_receptor_network <- prepare_ligand_receptor_visualization(
+  ligand_receptor_links_df,
+  best_upstream_ligands,
+  order_hclust = "both")
+p4 <-make_heatmap_ggplot(t(vis_ligand_receptor_network), 
+                         y_name = "Ligands", x_name = "Receptors",  
+                         color = "mediumvioletred", legend_title = "Prior interaction potential")
+p4
+####================================================================================
+rm(scobj2)
+rm(sce)
+rm(seurat_obj_receiver)
+gc()
+save.image("Nichenet_VSIG4(+)_Macrophages.Rdata")
+getwd()
