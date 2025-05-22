@@ -1,0 +1,43 @@
+# 清洗函数
+clean_genes <- function(x) {
+  x <- trimws(x)
+  x <- x[x != ""]
+  x <- na.omit(x)
+  unique(x)
+}
+
+# 创建清洗后的集合
+gene_list <- list(
+  Inflamed = clean_genes(df$Inflamed),
+  Healthy  = clean_genes(df$Healthy),
+  HCC      = clean_genes(df$HCC)
+)
+
+# 命名简化
+A <- gene_list$Inflamed
+B <- gene_list$Healthy
+C <- gene_list$HCC
+#####================================================================================
+library(eulerr)
+
+# 获取各区域的元素数量
+venn_counts <- c(
+  "Inflamed"               = length(setdiff(A, union(B, C))),
+  "Healthy"                = length(setdiff(B, union(A, C))),
+  "HCC"                    = length(setdiff(C, union(A, B))),
+  "Inflamed&Healthy"       = length(setdiff(intersect(A, B), C)),
+  "Inflamed&HCC"           = length(setdiff(intersect(A, C), B)),
+  "Healthy&HCC"            = length(setdiff(intersect(B, C), A)),
+  "Inflamed&Healthy&HCC"   = length(Reduce(intersect, list(A, B, C)))
+)
+#####================================================================================
+vd <- euler(venn_counts)
+
+plot(vd,
+     quantities = list(type = c("counts"), font = 1, cex = 0.85),
+     fill = c("#80C8CF", "#FBB9C0", "#FEF392"),
+     edges = list(col = "black", lwd = 2),
+     alpha = 0.8,
+     labels = list(col = "black", font = 2, cex = 0.9),
+     main = "VSIG4_module"
+)
