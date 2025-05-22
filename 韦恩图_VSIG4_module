@@ -69,7 +69,7 @@ p1 <- plot(vd,
 )
 
 # p2 <- plot(vd,
-#            quantities = list(type = c("counts"), font = 1, cex = 0.65),
+#            quantities = list(type = c("counts"), font = 1, cex = 0.65), #数值字号
 #            fill = c("#80C8CF", "#FBB9C0", "#FEF392"),
 #            edges = list(col = "black", lwd = 2),
 #            alpha = 0.8,
