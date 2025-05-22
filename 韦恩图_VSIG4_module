@@ -1,4 +1,7 @@
-# 清洗函数
+# 创建基因集列表（去除 NA）
+df <- read.table("vsig4.csv",header = T, sep = ",")
+
+# 清洗函数，去除NA, ""空字符#####================================================================================
 clean_genes <- function(x) {
   x <- trimws(x)
   x <- x[x != ""]
@@ -6,7 +9,7 @@ clean_genes <- function(x) {
   unique(x)
 }
 
-# 创建清洗后的集合
+# 创建清洗后的集合#####================================================================================
 gene_list <- list(
   Inflamed = clean_genes(df$Inflamed),
   Healthy  = clean_genes(df$Healthy),
@@ -17,9 +20,33 @@ gene_list <- list(
 A <- gene_list$Inflamed
 B <- gene_list$Healthy
 C <- gene_list$HCC
+#获取每个区域的基因名称#####################################
+region_list <- list(
+  "Inflamed only"          = setdiff(setdiff(A, B), C),
+  "Healthy only"           = setdiff(setdiff(B, A), C),
+  "HCC only"               = setdiff(setdiff(C, A), B),
+  "Inflamed ∩ Healthy"     = intersect(A, B),
+  "Inflamed ∩ HCC"         = intersect(A, C),
+  "Healthy ∩ HCC"          = intersect(B, C),
+  "Inflamed ∩ Healthy ∩ HCC" = intersect(intersect(A, B), C)
+)
+
+# 打印每个区域的基因名称
+for (region in names(region_list)) {
+  cat("\n---", region, "---\n")
+  print(region_list[[region]])
+}
+
+library(writexl)
+# 将每个基因向量转为数据框，并命名列
+region_df_list <- lapply(region_list, function(genes) {
+  data.frame(Gene = genes)
+})
+
+# 写入 Excel，每个交集作为一个 sheet
+write_xlsx(region_df_list, path = "VSIG4_Venn_Genes.xlsx")
 #####================================================================================
 library(eulerr)
-
 # 获取各区域的元素数量
 venn_counts <- c(
   "Inflamed"               = length(setdiff(A, union(B, C))),
@@ -32,12 +59,36 @@ venn_counts <- c(
 )
 #####================================================================================
 vd <- euler(venn_counts)
-
-plot(vd,
-     quantities = list(type = c("counts"), font = 1, cex = 0.85),
+p1 <- plot(vd,
+     quantities = list(type = c("counts"), font = 1, cex = 0.65),
      fill = c("#80C8CF", "#FBB9C0", "#FEF392"),
      edges = list(col = "black", lwd = 2),
      alpha = 0.8,
-     labels = list(col = "black", font = 2, cex = 0.9),
+     labels = list(col = "black", font = 2, cex = 0.65), #单词的字号
      main = "VSIG4_module"
 )
+
+# p2 <- plot(vd,
+#            quantities = list(type = c("counts"), font = 1, cex = 0.65),
+#            fill = c("#80C8CF", "#FBB9C0", "#FEF392"),
+#            edges = list(col = "black", lwd = 2),
+#            alpha = 0.8,
+#            labels = list(col = "black", font = 2, cex = 0.65), #单词的字号
+#            main = "VSIG4_module"
+# )
+#plot不能直接combine####================================================================================
+#2张图
+library(patchwork)
+library(ggplotify)
+p1g <- as.ggplot(p1)
+p2g <- as.ggplot(p2)
+combined <- p1g + p2g
+#ggplot2图像才能裁边#####################################
+combined2 <- combined + theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
+ggsave("combined_venn.pdf", combined, width = 17.6, height = 8.8, units = "cm", dpi = 600, device = cairo_pdf)
+
+#4张图
+combined <- p1g / p2g / p3g / p4g  # 使用 / 表示纵向排列
+ggsave("combined_4vertical.pdf", plot = combined,
+       width = 8.8, height = 35.2, units = "cm",  # 每张图 8.8cm 高，4张共 35.2cm
+       dpi = 600, device = cairo_pdf)
